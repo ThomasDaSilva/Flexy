@@ -36,6 +36,9 @@
         "twig/intl-extra": "^3.24",
         "twig/string-extra": "^3.24"
     },
+    "conflict": {
+        "thelia/thelia-skeleton": "<3.2"
+    },
     "autoload": {
         "psr-4": {
             "FlexyBundle\\": "src/",
