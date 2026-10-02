@@ -35,11 +35,75 @@ ACTIVE_FRONT_TEMPLATE=flexy
 
 A component owns its template, its styles and its behaviour in a single directory. `Base.php` holds the data, `Base.html.twig` the markup, `Base.css` the styles, `base_controller.js` the interactions.
 
+## Child templates
+
+A template of the shop that declares `<parent>flexy</parent>` in its `template.xml` ships only
+what it overrides, and Flexy answers for the rest:
+
+| It ships | What happens |
+|---|---|
+| A root page (`product.html.twig`) | Replaces Flexy's. To extend one instead of copying it, `{% extends '@theme_flexy/base.html.twig' %}`: every template of the chain is registered under `@theme_<name>`. `base.html.twig` exposes the `favicons` and `fonts` blocks for the two things a shop always replaces |
+| A component directory (`components/Molecules/Button/`) | Replaces Flexy's, anonymous components included; the other components of Flexy stay available |
+| `assets/styles/app.css` | Becomes the Tailwind entry point. Import Flexy's (`@import "../../../flexy/assets/styles/app.css"`), which carries its `@source` list, then add your own sources and a `@theme` block: a token declared there replaces Flexy's |
+| `assets/icons/*.svg` | Added to Flexy's icons; a file of the same name replaces it everywhere `ux_icon()` asks for that name |
+| `translations/messages.<locale>.yaml` | Loaded after Flexy's: a key it repeats replaces Flexy's |
+| An `importmap.php`, Stimulus controllers | Its own; without them, Flexy's serve |
+
+`/toolkit` lists the stories of the whole chain, the child's first, and previews them at the
+breakpoints of the nearest `variables.css`. Their statuses come from `components/Toolkit/story-statuses.php`
+(`return ['Molecules/Button' => ComponentStatus::READY];`, values `ready`, `waiting` or `hidden`):
+the nearest template that names a story answers for it, `ComponentStatus` for the rest.
+
+The project has one setting to check: `twig_component.anonymous_template_directory` must be
+`'@Flexy'` (`config/packages/twig_component.yaml`). A project configuration may set a filesystem
+path there, which is the nearest `components/` directory alone: a child that ships one component
+would then lose every anonymous component of Flexy.
+
+`debug:twig-component` cannot read a namespace in that setting, so Flexy hands it the nearest
+`components/` directory of the chain instead: the child's anonymous components are listed under
+their own name, the ones it inherits under the `theme_<name>:` prefix only.
+
+`ux:icons:import` writes into Flexy's `assets/icons/` (the `ux_icons.icon_dir` Flexy configures,
+as `<prefix>/<name>.svg`), not the child's: move the imported file into the child's
+`assets/icons/` afterwards.
+
 ## Extending it
 
 The template declares `theme_hook()` extension points across its pages — `layout.head.top`, `product.bottom`, `cart.top` and others. A module answers one by implementing `Thelia\Core\Hook\Theme\ThemeHookInterface`; the tag priority drives the rendering order.
 
 The SEOne module already answers `layout.head.top` and `layout.head.bottom`, which is where the title, description, canonical, hreflang and structured data come from.
+
+### Listing a module's component in the toolkit
+
+The toolkit (`/toolkit`, served only while the kernel runs in debug) walks the `components/` directories of the template chain and nothing else. A module lists its own components by implementing `FlexyBundle\Toolkit\StoryProviderInterface`; autoconfiguration tags it, and the tag priority sets the order in the sidebar. Each story names the template the toolkit renders and the file "Show the code" reads:
+
+```php
+namespace FlexyExtensionDemo\Toolkit;
+
+use FlexyBundle\Toolkit\ComponentStatus;
+use FlexyBundle\Toolkit\Story;
+use FlexyBundle\Toolkit\StoryProviderInterface;
+
+final readonly class CalloutStoryProvider implements StoryProviderInterface
+{
+    public function stories(): array
+    {
+        return [
+            new Story(
+                category: 'Modules',
+                name: 'Flexy extension demo / Callout',
+                twigPath: '@FlexyExtensionDemoModule/toolkit/Callout.html.twig',
+                sourcePath: __DIR__.'/../templates/toolkit/Callout.html.twig',
+                status: ComponentStatus::READY,
+            ),
+        ];
+    }
+}
+```
+
+A module's `templates/` directory is registered by the core as the `@{Code}Module` Twig namespace, so the story template needs nothing more. Its status follows the theme's rules (`READY`, `WAITING`, `HIDDEN` drops it), but `story-statuses.php` does not apply to it. Module stories come after those of the templates, and a story whose slug collides with a template story, the child's or one it inherits, stops the page rather than shadowing it.
+
+Mind the stylesheet: `assets/styles/app.css` limits the Tailwind scan to the theme's own files, so a utility class used only in a module template is never compiled. Build a module component out of the theme's components and classes.
 
 ## Deploying
 

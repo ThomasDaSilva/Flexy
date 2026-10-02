@@ -291,6 +291,7 @@ Don't have receive code ?: Didn't receive the code?
 every_cat: Discover %cat
 Product's visuals: Product's visuals
 This product combination is not available: This product combination is not available
+This product could not be added to your cart.: This product could not be added to your cart.
 This product combination is currently out of stock.: This product combination is currently out of stock.
 Select your state: Select your state
 State: State
@@ -368,6 +369,8 @@ Closed: Closed
 Product visuals: Product visuals
 Previous visual: Previous visual
 Next visual: Next visual
+Play video: Play video
+Show visual %number%: Show visual %number%
 only_n_left_in_stock: '%title%: only %count% left in stock.'
 only_one_left_in_stock: '%title%: only one left in stock.'
 Some products in your cart are no longer available in the requested quantity. Please adjust the quantities before ordering.: Some products in your cart are no longer available in the requested quantity. Please adjust the quantities before ordering.
@@ -481,3 +484,7 @@ Accept the required terms to continue.: Accept the required terms to continue.
 Accept the privacy policy to continue.: Accept the privacy policy to continue.
 This form contains %count% errors.: This form contains %count% errors.
 This form contains one error.: This form contains one error.
+
+# Tag close button (components/Molecules/Tag/Base.html.twig)
+Remove: Remove
+"Remove %label%": Remove %label%

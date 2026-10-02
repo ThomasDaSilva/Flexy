@@ -14,16 +14,29 @@ declare(strict_types=1);
 
 namespace FlexyBundle\Controller;
 
+use FlexyBundle\Template\FrontTemplateChain;
 use FlexyBundle\Toolkit\ComponentStatus;
+use FlexyBundle\Toolkit\StoryFinder;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\Finder\Finder;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Profiler\Profiler;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/toolkit', name: 'toolkit_')]
 class ToolkitController extends AbstractController
 {
+    public function __construct(
+        private readonly FrontTemplateChain $templateChain,
+        private readonly StoryFinder $storyFinder,
+        // By id: the service carries no alias for its class, and it only exists where the
+        // profiler is installed.
+        #[Autowire(service: 'profiler')]
+        private readonly ?Profiler $profiler = null,
+    ) {
+    }
+
     /**
      * The pages that are not components, by sidebar group. Each is listed only while its file
      * is there, so deleting the file retires the page, navigation entry included.
@@ -72,7 +85,7 @@ class ToolkitController extends AbstractController
             throw $this->createNotFoundException();
         }
 
-        $grouped = $this->getGroupedComponents();
+        $grouped = $this->storyFinder->groupedComponents();
         $pages = $this->buildPages($grouped);
 
         $slug ??= isset($pages[self::HOME]) ? self::HOME : array_key_first($pages);
@@ -82,12 +95,19 @@ class ToolkitController extends AbstractController
         }
 
         $page = $pages[$slug];
+        $embed = $request->query->getBoolean('embed');
+
+        // Embedded, the story is read by a script that measures its cells and audits the page:
+        // the debug toolbar would be measured and audited with it.
+        if ($embed) {
+            $this->profiler?->disable();
+        }
 
         $response = $this->render('@Flexy/Toolkit/show.html.twig', [
             'grouped' => $grouped,
             'sections' => $this->groupSections($pages),
             'breakpoints' => $this->getBreakpoints(),
-            'embed' => $request->query->getBoolean('embed'),
+            'embed' => $embed,
             'currentSlug' => $slug,
             'page' => $page,
             'source' => isset($page['path']) ? file_get_contents($page['path']) : null,
@@ -98,51 +118,6 @@ class ToolkitController extends AbstractController
         $response->headers->set('X-Robots-Tag', 'noindex, nofollow');
 
         return $response;
-    }
-
-    /**
-     * @return array<string, list<array{twigPath: string, path: string, name: string, slug: string, status: string|null}>>
-     */
-    private function getGroupedComponents(): array
-    {
-        $finder = (new Finder())
-            ->files()
-            ->name('toolkit.html.twig')
-            ->in(\dirname(__DIR__, 2) . '/components')
-            ->sortByName();
-
-        $grouped = [];
-
-        foreach ($finder as $file) {
-            $status = ComponentStatus::of($file->getRelativePath());
-
-            if (ComponentStatus::HIDDEN === $status) {
-                continue;
-            }
-
-            $parts = explode('/', $file->getRelativePath());
-            $category = $parts[0];
-            $name = \count($parts) > 1 ? implode(' / ', \array_slice($parts, 1)) : $category;
-            $slug = strtolower(implode('-', $parts));
-
-            $grouped[$category][] = [
-                'twigPath' => '@Flexy/' . $file->getRelativePathname(),
-                'path' => $file->getRealPath(),
-                'name' => $name,
-                'slug' => $slug,
-                'status' => $status,
-            ];
-        }
-
-        foreach (['Forms', 'Layouts'] as $category) {
-            if (isset($grouped[$category])) {
-                $items = $grouped[$category];
-                unset($grouped[$category]);
-                $grouped[$category] = $items;
-            }
-        }
-
-        return $grouped;
     }
 
     /**
@@ -159,11 +134,11 @@ class ToolkitController extends AbstractController
 
         foreach (self::SECTIONS as $group => $slugs) {
             foreach ($slugs as $slug => $section) {
-                if (!is_file(\dirname(__DIR__, 2) . '/components/Toolkit/' . $slug . '.html.twig')) {
+                if (null === $this->templateChain->nearest('components/Toolkit/' . $slug . '.html.twig', is_file(...))) {
                     continue;
                 }
 
-                $status = ComponentStatus::of('Toolkit/' . $slug);
+                $status = $this->storyFinder->statusOf('Toolkit/' . $slug);
 
                 // `hidden` means the same here as for a component: gone from the toolkit.
                 if (ComponentStatus::HIDDEN === $status) {
@@ -219,8 +194,10 @@ class ToolkitController extends AbstractController
      */
     private function getBreakpoints(): array
     {
-        $variablesPath = \dirname(__DIR__, 2) . '/assets/styles/variables.css';
-        $css = is_file($variablesPath) ? file_get_contents($variablesPath) : '';
+        // The nearest tokens file of the chain: a child template that redefines the breakpoints
+        // ships its own variables.css, and the toolkit has to preview at its widths.
+        $variablesDirectory = $this->templateChain->nearest('assets/styles/variables.css', is_file(...));
+        $css = null === $variablesDirectory ? '' : file_get_contents($variablesDirectory . '/assets/styles/variables.css');
 
         preg_match_all('/--breakpoint-([\w-]+):\s*([\d.]+)rem/', (string) $css, $matches, \PREG_SET_ORDER);
 

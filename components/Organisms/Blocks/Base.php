@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace FlexyBundle\Components\Organisms\Blocks;
 
+use FlexyBundle\Module\ActiveModules;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\UX\TwigComponent\Attribute\AsTwigComponent;
 use Thelia\Core\Content\BlockRendererInterface;
@@ -33,6 +34,7 @@ class Base
     public function __construct(
         private readonly BlockRendererInterface $blockRenderer,
         private readonly RequestStack $requestStack,
+        private readonly ActiveModules $activeModules,
     ) {
     }
 
@@ -43,6 +45,14 @@ class Base
         $this->itemType = $itemType;
         $this->itemId = $itemId;
         $this->visible = $visible;
+
+        // The blocks live in the tables of the TheliaBlocks module: a shop that keeps it inactive
+        // has neither the tables nor the generated models, and the page has to render without.
+        // ModuleQuery::getActivated() is cached for the request: the guard costs one query per page,
+        // and spares the renderer a call that would find nothing.
+        if (!$this->activeModules->has('TheliaBlocks')) {
+            return;
+        }
 
         $session = $this->requestStack->getCurrentRequest()?->getSession();
         $locale = $session instanceof Session ? $session->getLang()?->getLocale() : null;

@@ -14,22 +14,36 @@ declare(strict_types=1);
 
 namespace FlexyBundle;
 
+use FlexyBundle\DependencyInjection\Compiler\TwigComponentDebugDirectoryPass;
+use FlexyBundle\Template\FrontTemplateChain;
 use Symfony\Component\AssetMapper\AssetMapperInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
-use Thelia\Core\Template\TemplateDefinition;
-use Thelia\Core\Template\TemplateService;
+use Symfony\UX\Icons\Registry\LocalSvgIconRegistry;
+
+use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
 class FlexyBundle extends AbstractBundle
 {
-    /** @var list<string>|null */
-    private ?array $frontTemplateChain = null;
+    private ?FrontTemplateChain $frontTemplateChain = null;
 
+    #[\Override]
+    public function build(ContainerBuilder $container): void
+    {
+        parent::build($container);
+
+        $container->addCompilerPass(new TwigComponentDebugDirectoryPass());
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
     #[\Override]
     public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
     {
         $this->importServices($container);
+        $this->registerTemplateChainIcons($container, $builder);
     }
 
 
@@ -42,6 +56,7 @@ class FlexyBundle extends AbstractBundle
         $this->prependConfigUxIcons($builder);
         $this->prependConfigTailwind($builder);
         $this->prependConfigStimulus($builder);
+        $this->prependConfigTranslator($builder);
         $this->prependConfigPackages($container);
     }
 
@@ -64,10 +79,8 @@ class FlexyBundle extends AbstractBundle
      * The chain is read off the template.xml descriptors, which is all that can be read here:
      * a prepended configuration is built while the container is compiled, long before the
      * kernel boots.
-     *
-     * @return list<string>
      */
-    private function getFrontTemplateChain(ContainerBuilder $containerBuilder): array
+    private function getFrontTemplateChain(ContainerBuilder $containerBuilder): FrontTemplateChain
     {
         if (null !== $this->frontTemplateChain) {
             return $this->frontTemplateChain;
@@ -77,10 +90,7 @@ class FlexyBundle extends AbstractBundle
             ? (string) $containerBuilder->getParameter('thelia_front_template')
             : '';
 
-        return $this->frontTemplateChain = TemplateService::getTemplateChainAbsolutePath(
-            TemplateDefinition::FRONT_OFFICE_SUBDIR,
-            $activeTemplate,
-        );
+        return $this->frontTemplateChain = new FrontTemplateChain($activeTemplate);
     }
 
     /**
@@ -94,32 +104,47 @@ class FlexyBundle extends AbstractBundle
     }
 
     /**
-     * The first template of the chain that ships the given file or directory. Settings such as
-     * the Tailwind entry point or the importmap hold a single path: the nearest template that
-     * provides one answers for the whole chain.
-     *
-     * @param list<string> $chain
+     * `@theme_flexy` for the directory of the flexy template: a name a page can write, whatever
+     * the characters of the directory name.
      */
-    private function findInTemplateChain(array $chain, string $relativePath, callable $exists): ?string
+    public static function templateNamespace(string $templateDirectory): string
     {
-        foreach ($chain as $templateDirectory) {
-            if ($exists($templateDirectory . $relativePath)) {
-                return $templateDirectory;
-            }
-        }
-
-        return null;
+        return 'theme_' . preg_replace('/[^A-Za-z0-9_]/', '_', basename($templateDirectory));
     }
 
     private function prependConfigTwig(ContainerBuilder $containerBuilder): void
     {
         $paths = [];
+        $namespaces = [];
 
         // A child template overriding a component must be searched before the template it
         // inherits from, hence the chain first and this bundle's own directories last.
-        foreach ($this->getFrontTemplateChain($containerBuilder) as $templateDirectory) {
+        foreach ($this->getFrontTemplateChain($containerBuilder)->inherited() as $templateDirectory) {
+            $namespace = self::templateNamespace($templateDirectory);
+
+            // `my-shop` and `my_shop` both read `theme_my_shop`: Twig would merge the two roots
+            // under one namespace, and `@theme_my_shop/base.html.twig` would name whichever
+            // comes first, the page extending itself instead of its parent.
+            if (isset($namespaces[$namespace])) {
+                throw new \LogicException(\sprintf(
+                    'The front templates "%s" and "%s" both map to the Twig namespace "@%s": rename one of them.',
+                    $namespaces[$namespace],
+                    $templateDirectory,
+                    $namespace,
+                ));
+            }
+
+            $namespaces[$namespace] = $templateDirectory;
+
             $paths[$templateDirectory . '/components'] = 'Flexy';
             $paths[$templateDirectory . '/form'] = 'FlexyForm';
+
+            // The root of each template under its own namespace, so that a child template
+            // extends a page of its parent instead of copying it whole:
+            //     {% extends '@theme_flexy/base.html.twig' %}
+            // A root page asked for by its bare name still resolves through the chain, nearest
+            // first; the namespace is what a page needs to name the one it inherits from.
+            $paths[$templateDirectory] = $namespace;
         }
 
         $paths[\dirname(__DIR__) . '/components'] = 'Flexy';
@@ -140,17 +165,16 @@ class FlexyBundle extends AbstractBundle
     }
     private function prependConfigTwigComponent(ContainerBuilder $containerBuilder): void
     {
-        // A single directory, resolved relative to the Twig paths of the project: the nearest
-        // template of the chain that ships anonymous components answers for all of them.
-        $templateDirectory = $this->findInTemplateChain(
-            $this->getFrontTemplateChain($containerBuilder),
-            '/components',
-            is_dir(...),
-        ) ?? \dirname(__DIR__);
-
+        // Anonymous components (a template without a PHP class, `Fields/*` for the most part)
+        // are looked up in a single directory, which the finder resolves through the Twig
+        // loader: named by the `@Flexy` namespace, that directory is the whole chain, the
+        // component directory of the active template first, the one of this bundle last. A
+        // filesystem path here would be the nearest `components/` alone, and a child template
+        // that ships one component would lose every anonymous component of its parent.
+        // `debug:twig-component` cannot read a namespace there: TwigComponentDebugDirectoryPass
+        // hands it a filesystem path of its own.
         $containerBuilder->prependExtensionConfig('twig_component', [
-            'anonymous_template_directory' => TemplateDefinition::FRONT_OFFICE_SUBDIR
-                . '/' . basename($templateDirectory) . '/components/',
+            'anonymous_template_directory' => '@Flexy',
             'defaults' => [
                 'FlexyBundle\\Components\\' => [
                     'template_directory' => '@Flexy',
@@ -187,7 +211,7 @@ class FlexyBundle extends AbstractBundle
 
         // The active template first, then the templates it inherits from: an asset the child
         // redefines must be found before the one it replaces.
-        foreach ($chain as $templateDirectory) {
+        foreach ($chain->inherited() as $templateDirectory) {
             $paths[] = $templateDirectory . '/assets';
             $paths[] = $templateDirectory . '/assets/styles';
             $paths[] = $templateDirectory . '/components';
@@ -202,8 +226,9 @@ class FlexyBundle extends AbstractBundle
 
         // The importmap and the vendor assets it downloads belong to the same template: a
         // child template that ships none of its own runs on those of its parent.
-        $importmapDirectory = $this->findInTemplateChain($chain, '/importmap.php', is_file(...))
-            ?? \dirname(__DIR__);
+        // directories() always ends with this template, which ships an importmap: never null.
+        $importmapDirectory = $chain->nearest('importmap.php', is_file(...))
+            ?? throw new \LogicException('This template ships an importmap.php.');
 
         $containerBuilder->prependExtensionConfig('framework', [
             'asset_mapper' => [
@@ -220,29 +245,82 @@ class FlexyBundle extends AbstractBundle
 
     private function prependConfigUxIcons(ContainerBuilder $containerBuilder): void
     {
-        $iconDirectory = $this->findInTemplateChain(
-            $this->getFrontTemplateChain($containerBuilder),
-            '/assets/icons',
-            is_dir(...),
-        );
-
+        // ux-icons reads one directory. It is this bundle's own, always present: the icons a
+        // template of the chain adds or replaces come from the registries
+        // registerTemplateChainIcons() declares, which answer before this one.
         $containerBuilder->prependExtensionConfig('ux_icons', [
-            'icon_dir' => null === $iconDirectory
-                ? '%kernel.project_dir%/templates/frontOffice/%thelia_front_template%/assets/icons'
-                : $iconDirectory . '/assets/icons',
+            'icon_dir' => $this->getFrontTemplateChain($containerBuilder)->ownInChain() . '/assets/icons',
             // The bundle defaults this to ['fill' => 'currentColor'], which its precedence
             // applies over the fill a file declares rather than in place of a missing one.
             'default_icon_attributes' => [],
         ]);
     }
 
+    /**
+     * One icon registry per template of the chain that ships icons, this bundle's excepted (it
+     * is the configured directory). The nearest template answers first: an icon it ships under
+     * the name of one of ours replaces it everywhere `ux_icon()` asks for that name, and an icon
+     * it does not ship falls through to the next template, down to ours.
+     *
+     * ux-icons chains its registries by the priority of the `ux_icons.registry` tag; its own
+     * local registry sits at 10.
+     */
+    private function registerTemplateChainIcons(ContainerConfigurator $containerConfigurator, ContainerBuilder $containerBuilder): void
+    {
+        $chain = $this->getFrontTemplateChain($containerBuilder)->inherited();
+        $priority = 20 + \count($chain);
+        $services = $containerConfigurator->services();
+
+        foreach ($chain as $templateDirectory) {
+            --$priority;
+
+            if (FrontTemplateChain::isOwn($templateDirectory) || !is_dir($iconDirectory = $templateDirectory . '/assets/icons')) {
+                continue;
+            }
+
+            // LocalSvgIconRegistry and the `.ux_icons.icon_factory` service are internal to
+            // ux-icons: checked against symfony/ux-icons 2.36.1, whose constructor reads
+            // (IconFactory $iconFactory, string $iconDir, array $iconSetPaths = []).
+            // FlexyBundlePrependTest compiles this definition against the real extension.
+            $services->set('flexy.icon_registry.' . basename($templateDirectory), LocalSvgIconRegistry::class)
+                ->args([service('.ux_icons.icon_factory'), $iconDirectory])
+                ->tag('ux_icons.registry', ['priority' => $priority]);
+        }
+    }
+
+    /**
+     * The `translations/` catalogues of the templates of the chain, parents first: the framework
+     * loads the paths in this order and a key read later replaces the one read before, so the
+     * nearest template has the last word. Ours is left out: a bundle's `translations/` directory
+     * is registered by the framework itself, before every configured path.
+     */
+    private function prependConfigTranslator(ContainerBuilder $containerBuilder): void
+    {
+        $paths = [];
+
+        foreach (array_reverse($this->getFrontTemplateChain($containerBuilder)->inherited()) as $templateDirectory) {
+            if (FrontTemplateChain::isOwn($templateDirectory)) {
+                continue;
+            }
+
+            if (is_dir($translationsDirectory = $templateDirectory . '/translations')) {
+                $paths[] = $translationsDirectory;
+            }
+        }
+
+        if ([] === $paths) {
+            return;
+        }
+
+        $containerBuilder->prependExtensionConfig('framework', [
+            'translator' => ['paths' => $paths],
+        ]);
+    }
+
     private function prependConfigTailwind(ContainerBuilder $containerBuilder): void
     {
-        $stylesDirectory = $this->findInTemplateChain(
-            $this->getFrontTemplateChain($containerBuilder),
-            '/assets/styles/app.css',
-            is_file(...),
-        );
+        $stylesDirectory = $this->getFrontTemplateChain($containerBuilder)
+            ->nearestInherited('assets/styles/app.css', is_file(...));
 
         $containerBuilder->prependExtensionConfig('symfonycasts_tailwind', [
             'input_css' => null === $stylesDirectory
@@ -271,16 +349,12 @@ class FlexyBundle extends AbstractBundle
 
         $controllerPaths = [];
 
-        foreach ($chain as $templateDirectory) {
+        foreach ($chain->inherited() as $templateDirectory) {
             $controllerPaths[] = $templateDirectory . '/assets/controllers';
             $controllerPaths[] = $templateDirectory . '/components';
         }
 
-        $controllersJsonDirectory = $this->findInTemplateChain(
-            $chain,
-            '/assets/controllers.json',
-            is_file(...),
-        );
+        $controllersJsonDirectory = $chain->nearestInherited('assets/controllers.json', is_file(...));
 
         $containerBuilder->prependExtensionConfig('stimulus', [
             'controller_paths' => $this->keepExistingDirectories($controllerPaths),

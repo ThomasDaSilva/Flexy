@@ -22,7 +22,7 @@
 
     <section id="gallery" class="ProductPage-gallery">
         <twig:Organisms:ProductGallery:Base
-            :images="images"
+            :media="media"
             :currentPseId="currentPse.id|default(null)"
             :tags="galleryTags"
         />
@@ -59,6 +59,7 @@
             :stockManaged="this.isStockManaged()"
             :remainingStock="this.getRemainingStock()"
             :maxQuantityReached="this.isMaxQuantityReached()"
+            :cartRefused="this.cartRefused"
         />
 
         <twig:Molecules:Reinsurance:Base

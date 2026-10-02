@@ -6,6 +6,7 @@
 {# @prop stockManaged bool Whether stock is enforced for this product #}
 {# @prop remainingStock int Stock left once what is already in the cart is deducted #}
 {# @prop maxQuantityReached bool The cart already holds the whole available stock #}
+{# @prop cartRefused bool The cart refused the last add (a module rule, the stock gone meanwhile) #}
 {% props
     form,
     productAttrs = [],
@@ -14,7 +15,8 @@
     noAvailablePse = false,
     stockManaged = false,
     remainingStock = 0,
-    maxQuantityReached = false
+    maxQuantityReached = false,
+    cartRefused = false
 %}
 
 {# The Flexy form theme is no longer global: without this the widgets below silently fall back to
@@ -106,6 +108,15 @@
         </fieldset>
     {% endif %}
 
+    {% if cartRefused %}
+        <twig:Molecules:SnackBar:Base
+            variant="error"
+            withIcon
+            role="alert"
+            text="{{ 'This product could not be added to your cart.'|trans }}"
+        />
+    {% endif %}
+
     {% if noAvailablePse %}
         <twig:Molecules:SnackBar:Base
             variant="warning"
@@ -155,4 +166,14 @@
     {% endif %}
 
     {{ form_end(form) }}
+
+    {# Alerts a shopper can leave on the selected variant (back in stock, price drop): a module
+       answers here. Outside the cart form on purpose, since the block carries its own form. #}
+    {% if not noAvailablePse %}
+        {{ theme_hook('product.pse.alerts', {
+            pseId: currentPse.id,
+            outOfStock: outOfStock,
+            taxedPrice: currentPse.isPromo ? currentPse.promoPrice : currentPse.price,
+        }) }}
+    {% endif %}
 </div>
