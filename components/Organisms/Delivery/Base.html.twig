@@ -94,8 +94,9 @@
             {% endfor %}
         {% else %}
             {% set blockingProducts = this.productsBlockingEveryCarrier %}
+            {# The snack bar prints its text raw: the titles are the merchant's and the postal code is
+               the buyer's, each escaped before it joins the sentence. #}
             {% if blockingProducts is not empty %}
-                {# SnackBar prints its text raw: the titles are the merchant's, escaped one by one before they join the sentence. #}
                 {% set blockingTitles = blockingProducts|map(title => title|e)|join(', ') %}
                 {% if blockingProducts|length == 1 %}
                     {% set blockingMessage = 'No carrier can ship: %products%. Remove it from your cart to complete your order.'|trans({'%products%': blockingTitles}) %}
@@ -103,7 +104,12 @@
                     {% set blockingMessage = 'No carrier can ship: %products%. Remove them from your cart to complete your order.'|trans({'%products%': blockingTitles}) %}
                 {% endif %}
             {% else %}
-                {% set blockingMessage = 'No delivery method is available for this order.'|trans %}
+                {% set postalCodeWithoutCarrier = this.postalCodeWithoutCarrier %}
+                {% if postalCodeWithoutCarrier %}
+                    {% set blockingMessage = 'No carrier delivers to the postal code %code%. Check it, or choose another delivery address.'|trans({'%code%': postalCodeWithoutCarrier|e}) %}
+                {% else %}
+                    {% set blockingMessage = 'No delivery method is available for this order.'|trans %}
+                {% endif %}
             {% endif %}
             <twig:Molecules:SnackBar:Base
                 variant="warning"
