@@ -92,10 +92,11 @@
                 {% endif %}
             {% endfor %}
         {% else %}
+            {% set postalCodeWithoutCarrier = this.postalCodeWithoutCarrier %}
             <twig:Molecules:SnackBar:Base
                 variant="warning"
                 withIcon
-                text="{{ 'No delivery method is available for this order.'|trans }}"
+                text="{{ postalCodeWithoutCarrier ? 'No carrier delivers to the postal code %code%. Check it, or choose another delivery address.'|trans({'%code%': postalCodeWithoutCarrier}) : 'No delivery method is available for this order.'|trans }}"
             />
         {% endif %}
     </div>
