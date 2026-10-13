@@ -609,3 +609,5 @@ Being prepared: Being prepared
 Download the delivery note: Download the delivery note
 Still to be shipped: Still to be shipped
 These items will leave in a later shipment.: These items will leave in a later shipment.
+'Estimated delivery on %date% (%country%)': 'Estimated delivery on %date% (%country%)'
+'Estimated delivery between %min% and %max% (%country%)': 'Estimated delivery between %min% and %max% (%country%)'

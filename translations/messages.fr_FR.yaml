@@ -618,3 +618,5 @@ Being prepared: En préparation
 Download the delivery note: Télécharger le bon de livraison
 Still to be shipped: Reste à expédier
 These items will leave in a later shipment.: Ces articles partiront dans un prochain envoi.
+'Estimated delivery on %date% (%country%)': 'Livraison estimée le %date% (%country%)'
+'Estimated delivery between %min% and %max% (%country%)': 'Livraison estimée entre le %min% et le %max% (%country%)'
