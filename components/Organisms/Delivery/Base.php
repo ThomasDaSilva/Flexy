@@ -196,6 +196,8 @@ class Base
                     // What the module tells the buyer about the option: the pickup hours of a
                     // store, the delay of a carrier. Plain text, escaped where it is printed.
                     'description' => self::descriptionOf($option),
+                    'earliestDelivery' => $option->getMinimumDeliveryDate(),
+                    'latestDelivery' => $option->getMaximumDeliveryDate(),
                     // What the buyer picks with this carrier: none, a day, or a slot. A core
                     // that predates delivery dates answers nothing, which is none.
                     'deliveryDateChoice' => method_exists($module, 'getDeliveryDateChoice') ? $module->getDeliveryDateChoice() : 'none',
