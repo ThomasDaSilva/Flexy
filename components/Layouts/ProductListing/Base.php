@@ -44,6 +44,12 @@ class Base extends AbstractController
 
     public const ITEMS_PER_PAGE = 30;
 
+    /**
+     * Listed in config/packages/csrf.yaml: the filters of a category sit on a page a proxy may serve
+     * to every visitor, so their token cannot belong to the session of whoever asked first.
+     */
+    public const FORM_TOKEN_ID = 'thelia_product_listing';
+
     #[LiveProp]
     public ?int $categoryId = null;
 
@@ -214,7 +220,10 @@ class Base extends AbstractController
 
     protected function instantiateForm(): FormInterface
     {
-        $formBuilder = $this->createFormBuilder(null, ['attr' => ['class' => 'ProductListing-form']]);
+        $formBuilder = $this->createFormBuilder(null, [
+            'attr' => ['class' => 'ProductListing-form'],
+            'csrf_token_id' => self::FORM_TOKEN_ID,
+        ]);
         $filters = $this->getFilters();
 
         if ($filters === []) {
