@@ -20,16 +20,27 @@ use PHPUnit\Framework\TestCase;
 use Symfony\UX\LiveComponent\Attribute\AsLiveComponent;
 
 /**
- * Clicking a carrier card emits an event the delivery step listens to: that listener is
- * what writes the carrier on the cart, and nothing else would.
+ * Each click of the delivery step reaches it as an event: a listener moved off its method,
+ * by a method written between the attribute and the one it decorates, is a click that does
+ * nothing, and no page test would say so.
  */
 final class DeliveryStepListenersTest extends TestCase
 {
-    public function testTheStepWritesTheCarrierTheBuyerClicks(): void
+    public function testEachEventOfTheStepReachesTheMethodThatHandlesIt(): void
     {
-        self::assertContains(
+        $expected = [
+            ['action' => 'resetAddressForm', 'event' => CheckoutEvents::ADD_NEW_DELIVERY_ADDRESS],
+            ['action' => 'resetAddressForm', 'event' => 'cancelAddressForm'],
+            ['action' => 'setEditingAddress', 'event' => CheckoutEvents::EDIT_DELIVERY_ADDRESS],
+            ['action' => 'deleteAddress', 'event' => CheckoutEvents::DELETE_DELIVERY_ADDRESS],
             ['action' => 'selectDeliveryModuleOption', 'event' => CheckoutEvents::SET_DELIVERY_MODULE_OPTION],
-            AsLiveComponent::liveListeners(DeliveryStep::class),
-        );
+            ['action' => 'selectDeliveryAddress', 'event' => CheckoutEvents::SET_DELIVERY_ORDER_ADDRESS_ID],
+            ['action' => 'forgetTheDeliveryDateNotice', 'event' => CheckoutEvents::DELIVERY_DATE_CHOSEN],
+            ['action' => 'selectInvoiceAddress', 'event' => CheckoutEvents::SET_INVOICE_ORDER_ADDRESS_ID],
+        ];
+
+        $listeners = AsLiveComponent::liveListeners(DeliveryStep::class);
+
+        self::assertEqualsCanonicalizing($expected, $listeners);
     }
 }
