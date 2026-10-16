@@ -1,6 +1,8 @@
+{# A live component needs one root element, drawn even when there is nothing to announce. #}
+<div {{ attributes }}>
 {% set estimate = this.estimate %}
 {% if estimate %}
-    <p class="{{ ('DeliveryEstimate ' ~ attributes.render('class'))|tailwind_merge }}" {{ attributes.without('class') }} data-testid="product-delivery-estimate">
+    <p class="DeliveryEstimate mt-5" data-testid="product-delivery-estimate">
         {{ ux_icon('reinsurance-delivery', {'aria-hidden': 'true', class: 'DeliveryEstimate-icon'}) }}
         <span>
             {% if estimate.earliest == estimate.latest %}
@@ -11,3 +13,4 @@
         </span>
     </p>
 {% endif %}
+</div>

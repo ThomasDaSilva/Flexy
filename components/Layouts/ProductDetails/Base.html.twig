@@ -63,7 +63,10 @@
             :cartRefusalReason="this.cartRefusalReason"
         />
 
-        <twig:Organisms:DeliveryEstimate:Base :productId="this.productId" class="mt-5" />
+        {# Nothing to promise while the combination shown cannot be bought: missing, or out of a stock the shop manages. #}
+        {% if not noAvailablePse and not (this.isStockManaged() and (this.currentPse.quantity ?? 0) <= 0) %}
+            <twig:Organisms:DeliveryEstimate:Base :productId="this.productId" />
+        {% endif %}
 
         <twig:Molecules:Reinsurance:Base
             class="mt-7.5"
