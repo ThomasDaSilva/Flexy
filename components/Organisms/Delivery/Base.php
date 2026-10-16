@@ -222,7 +222,6 @@ class Base
         }
     }
 
-    #[LiveListener(CheckoutEvents::SET_DELIVERY_MODULE_OPTION)]
     /**
      * A delivery module may write anything in the two dates of its option: only a Y-m-d day is
      * shown, anything else is no date rather than a page that cannot be drawn.
@@ -234,6 +233,7 @@ class Base
         return false !== $parsed && $parsed->format('Y-m-d') === $day ? $day : null;
     }
 
+    #[LiveListener(CheckoutEvents::SET_DELIVERY_MODULE_OPTION)]
     public function selectDeliveryModuleOption(#[LiveArg] string $optionCode, #[LiveArg] int $moduleId): void
     {
         // The option and the module come from the page: only one the cart can be shipped
