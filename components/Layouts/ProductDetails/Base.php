@@ -210,12 +210,12 @@ class Base
     }
 
     /**
-     * Whether the combination shown can be bought: it exists and, when the shop manages its
-     * stock, some of it is left. Nothing is promised about a delivery otherwise.
+     * Nothing is promised about a delivery for a combination that is missing, not chosen, or
+     * out of a stock the shop manages.
      */
     public function canBeBought(): bool
     {
-        if ($this->noAvailablePse) {
+        if ($this->noAvailablePse || null === $this->currentPse) {
             return false;
         }
 
