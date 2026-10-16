@@ -209,6 +209,19 @@ class Base
         return ConfigQuery::checkAvailableStock();
     }
 
+    /**
+     * Whether the combination shown can be bought: it exists and, when the shop manages its
+     * stock, some of it is left. Nothing is promised about a delivery otherwise.
+     */
+    public function canBeBought(): bool
+    {
+        if ($this->noAvailablePse) {
+            return false;
+        }
+
+        return !$this->isStockManaged() || (int) ($this->currentPse['quantity'] ?? 0) > 0;
+    }
+
     public function getRemainingStock(): int
     {
         if (!$this->isStockManaged()) {

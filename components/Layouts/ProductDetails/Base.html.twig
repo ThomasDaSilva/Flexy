@@ -63,8 +63,7 @@
             :cartRefusalReason="this.cartRefusalReason"
         />
 
-        {# Nothing to promise while the combination shown cannot be bought: missing, or out of a stock the shop manages. #}
-        {% if not noAvailablePse and not (this.isStockManaged() and (this.currentPse.quantity ?? 0) <= 0) %}
+        {% if this.canBeBought() %}
             <twig:Organisms:DeliveryEstimate:Base :productId="this.productId" />
         {% endif %}
 
