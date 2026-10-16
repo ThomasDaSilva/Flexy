@@ -187,6 +187,12 @@ class Base
 
             foreach ($options as $option) {
                 $code = $option->getCode();
+                // A module may write its two dates the wrong way round: the earlier one opens
+                // the interval all the same.
+                $days = [self::calendarDay($option->getMinimumDeliveryDate()), self::calendarDay($option->getMaximumDeliveryDate())];
+                if (null !== $days[0] && null !== $days[1]) {
+                    sort($days);
+                }
                 $deliveryOptions[$code] = [
                     'code' => $code,
                     'title' => $title,
@@ -196,8 +202,8 @@ class Base
                     // What the module tells the buyer about the option: the pickup hours of a
                     // store, the delay of a carrier. Plain text, escaped where it is printed.
                     'description' => self::descriptionOf($option),
-                    'earliestDelivery' => self::calendarDay($option->getMinimumDeliveryDate()),
-                    'latestDelivery' => self::calendarDay($option->getMaximumDeliveryDate()),
+                    'earliestDelivery' => $days[0],
+                    'latestDelivery' => $days[1],
                     // What the buyer picks with this carrier: none, a day, or a slot. A core
                     // that predates delivery dates answers nothing, which is none.
                     'deliveryDateChoice' => method_exists($module, 'getDeliveryDateChoice') ? $module->getDeliveryDateChoice() : 'none',
