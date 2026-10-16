@@ -26,7 +26,7 @@
                     {% if earliest %}
                         <span class="DeliveryMode-estimate" data-testid="delivery-estimate">
                             {% if earliest == latest %}
-                                {{ 'Estimated delivery on'|trans }} {{ earliest|format_date(pattern: 'EEEE d MMMM') }}
+                                {{ 'Estimated delivery on %date%'|trans({'%date%': earliest|format_date(pattern: 'EEEE d MMMM')}) }}
                             {% else %}
                                 {{ 'delivery_estimation'|trans({'%min%': earliest|format_date(pattern: 'EEEE d MMMM'), '%max%': latest|format_date(pattern: 'EEEE d MMMM')}) }}
                             {% endif %}
