@@ -196,8 +196,8 @@ class Base
                     // What the module tells the buyer about the option: the pickup hours of a
                     // store, the delay of a carrier. Plain text, escaped where it is printed.
                     'description' => self::descriptionOf($option),
-                    'earliestDelivery' => $option->getMinimumDeliveryDate(),
-                    'latestDelivery' => $option->getMaximumDeliveryDate(),
+                    'earliestDelivery' => self::calendarDay($option->getMinimumDeliveryDate()),
+                    'latestDelivery' => self::calendarDay($option->getMaximumDeliveryDate()),
                     // What the buyer picks with this carrier: none, a day, or a slot. A core
                     // that predates delivery dates answers nothing, which is none.
                     'deliveryDateChoice' => method_exists($module, 'getDeliveryDateChoice') ? $module->getDeliveryDateChoice() : 'none',
@@ -223,6 +223,17 @@ class Base
     }
 
     #[LiveListener(CheckoutEvents::SET_DELIVERY_MODULE_OPTION)]
+    /**
+     * A delivery module may write anything in the two dates of its option: only a Y-m-d day is
+     * shown, anything else is no date rather than a page that cannot be drawn.
+     */
+    private static function calendarDay(?string $day): ?string
+    {
+        $parsed = null === $day ? false : \DateTimeImmutable::createFromFormat('!Y-m-d', $day);
+
+        return false !== $parsed && $parsed->format('Y-m-d') === $day ? $day : null;
+    }
+
     public function selectDeliveryModuleOption(#[LiveArg] string $optionCode, #[LiveArg] int $moduleId): void
     {
         // The option and the module come from the page: only one the cart can be shipped

@@ -14,20 +14,28 @@ declare(strict_types=1);
 
 namespace FlexyBundle\Components\Organisms\DeliveryEstimate;
 
-use Symfony\UX\TwigComponent\Attribute\AsTwigComponent;
+use Symfony\UX\LiveComponent\Attribute\AsLiveComponent;
+use Symfony\UX\LiveComponent\Attribute\LiveProp;
+use Symfony\UX\LiveComponent\DefaultActionTrait;
 use Thelia\Domain\Cart\CartFacade;
 use Thelia\Domain\Localization\Service\LangService;
 use Thelia\Domain\Shipping\ShippingFacade;
-use Thelia\Model\ProductQuery;
 
 /**
  * The delivery a product page announces, for the destination of the visitor and named
  * after it. Nothing is shown when no carrier delivering there announces delays, on a core
  * that does not estimate deliveries yet, or for a virtual product.
+ *
+ * A live component of its own: the product details re-render on every change of
+ * combination or quantity, and this estimate depends on neither, so it is not counted
+ * again for them.
  */
-#[AsTwigComponent]
+#[AsLiveComponent]
 class Base
 {
+    use DefaultActionTrait;
+
+    #[LiveProp]
     public int $productId = 0;
 
     public function __construct(
@@ -42,18 +50,12 @@ class Base
      */
     public function getEstimate(): ?array
     {
-        if (!method_exists($this->shippingFacade, 'estimateProductDelivery')) {
-            return null;
-        }
-
-        $product = ProductQuery::create()->findPk($this->productId);
-
-        if (null === $product) {
+        if (!method_exists($this->shippingFacade, 'estimateProductDeliveryById')) {
             return null;
         }
 
         // The cart of the session, never a new one: looking at a product creates no cart.
-        $estimate = $this->shippingFacade->estimateProductDelivery($product, $this->cartFacade->getCartFromSession());
+        $estimate = $this->shippingFacade->estimateProductDeliveryById($this->productId, $this->cartFacade->getCartFromSession());
 
         if (null === $estimate) {
             return null;
