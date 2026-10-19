@@ -32,10 +32,12 @@ use Thelia\Core\HttpFoundation\Session\Session;
 use Thelia\Domain\Addressing\Exception\AddressNotFoundException;
 use Thelia\Domain\Addressing\Service\AddressService;
 use Thelia\Domain\Cart\CartFacade;
+use Thelia\Domain\Cart\Service\CartAddressService;
 use Thelia\Domain\Checkout\DTO\CheckoutDTO;
 use Thelia\Domain\Customer\Exception\CustomerException;
 use Thelia\Domain\Localization\Service\LangService;
 use Thelia\Domain\Shipping\ShippingFacade;
+use Thelia\Model\AddressQuery;
 
 #[AsLiveComponent]
 class Base
@@ -89,6 +91,7 @@ class Base
         private readonly LoggerInterface $logger,
         private readonly GuestCheckoutGate $guestCheckoutGate,
         private readonly DeliveryDateBridge $deliveryDates,
+        private readonly CartAddressService $cartAddressService,
     ) {
     }
 
@@ -121,9 +124,10 @@ class Base
     }
 
     /**
-     * The cart keeps its own copy of the delivery address, taken when the address was chosen:
-     * an edit of that very address is chosen again, so that the carriers, the postage and the
-     * order follow the address the buyer now reads.
+     * The cart keeps its own copy of the delivery address, taken when the address was chosen,
+     * and the order leaves for that copy: an edit of that very address reaches it. A new
+     * place, another country, state or postal code, is chosen again, which asks the carriers
+     * and their postage again; anything else is copied over, and the carrier stays.
      */
     #[LiveListener(CheckoutEvents::ADD_NEW_DELIVERY_ADDRESS)]
     public function addressSaved(): void
@@ -131,9 +135,26 @@ class Base
         $edited = $this->editingAddressId;
         $this->resetAddressForm();
 
-        if (null !== $edited && $edited === $this->cartFacade->getDeliveryAddressId()) {
-            $this->selectDeliveryAddress($edited);
+        if (null === $edited || $edited !== $this->cartFacade->getDeliveryAddressId()) {
+            return;
         }
+
+        $copy = $this->cartFacade->getOrCreateFromSession()->getCartAddressRelatedByAddressDeliveryId();
+        $address = AddressQuery::create()->findPk($edited);
+
+        if (null === $copy || null === $address) {
+            return;
+        }
+
+        if ($copy->getCountryId() === $address->getCountryId()
+            && $copy->getStateId() === $address->getStateId()
+            && (string) $copy->getZipcode() === (string) $address->getZipcode()) {
+            $this->cartAddressService->getOrCreateCartAddressFromAddress($address, $copy);
+
+            return;
+        }
+
+        $this->selectDeliveryAddress($edited);
     }
 
     #[LiveListener(CheckoutEvents::EDIT_DELIVERY_ADDRESS)]
