@@ -99,7 +99,10 @@ class Base
     {
         $this->deliveryAddressId = $this->cartFacade->getDeliveryAddressId();
 
-        if (null === $this->deliveryAddressId) {
+        if (null !== $this->deliveryAddressId) {
+            // Edited since it was chosen, from the account or another step: the cart follows.
+            $this->followTheDeliveryAddress($this->deliveryAddressId);
+        } else {
             $defaultAddresses = array_filter(
                 $this->getAddressList(),
                 static fn (array $address): bool => (bool) $address['isDefault'],
@@ -123,24 +126,28 @@ class Base
         $this->editingAddressId = null;
     }
 
-    /**
-     * The cart keeps its own copy of the delivery address, taken when the address was chosen,
-     * and the order leaves for that copy: an edit of that very address reaches it. A new
-     * place, another country, state or postal code, is chosen again, which asks the carriers
-     * and their postage again; anything else is copied over, and the carrier stays.
-     */
     #[LiveListener(CheckoutEvents::ADD_NEW_DELIVERY_ADDRESS)]
     public function addressSaved(): void
     {
         $edited = $this->editingAddressId;
         $this->resetAddressForm();
 
-        if (null === $edited || $edited !== $this->cartFacade->getDeliveryAddressId()) {
-            return;
+        if (null !== $edited && $edited === $this->cartFacade->getDeliveryAddressId()) {
+            $this->followTheDeliveryAddress($edited);
         }
+    }
 
+    /**
+     * The cart keeps its own copy of the delivery address, taken when the address was chosen,
+     * and the order leaves for that copy: an edit of that very address reaches it, on this
+     * step or once back on it. A new place, another country, state or postal code, is chosen
+     * again, which asks the carriers and their postage again; anything else is copied over,
+     * and the carrier stays.
+     */
+    private function followTheDeliveryAddress(int $addressId): void
+    {
         $copy = $this->cartFacade->getOrCreateFromSession()->getCartAddressRelatedByAddressDeliveryId();
-        $address = AddressQuery::create()->findPk($edited);
+        $address = AddressQuery::create()->findPk($addressId);
 
         if (null === $copy || null === $address) {
             return;
@@ -149,12 +156,13 @@ class Base
         if ($copy->getCountryId() === $address->getCountryId()
             && $copy->getStateId() === $address->getStateId()
             && (string) $copy->getZipcode() === (string) $address->getZipcode()) {
+            // Saved only when a copied column changed: Propel writes nothing otherwise.
             $this->cartAddressService->getOrCreateCartAddressFromAddress($address, $copy);
 
             return;
         }
 
-        $this->selectDeliveryAddress($edited);
+        $this->selectDeliveryAddress($addressId);
     }
 
     #[LiveListener(CheckoutEvents::EDIT_DELIVERY_ADDRESS)]
