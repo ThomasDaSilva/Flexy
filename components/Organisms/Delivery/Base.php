@@ -113,12 +113,27 @@ class Base
         $this->deliveryModuleId = $this->cartFacade->getDeliveryModuleId();
     }
 
-    #[LiveListener(CheckoutEvents::ADD_NEW_DELIVERY_ADDRESS)]
     #[LiveListener('cancelAddressForm')]
     public function resetAddressForm(): void
     {
         $this->showNewAddressForm = false;
         $this->editingAddressId = null;
+    }
+
+    /**
+     * The cart keeps its own copy of the delivery address, taken when the address was chosen:
+     * an edit of that very address is chosen again, so that the carriers, the postage and the
+     * order follow the address the buyer now reads.
+     */
+    #[LiveListener(CheckoutEvents::ADD_NEW_DELIVERY_ADDRESS)]
+    public function addressSaved(): void
+    {
+        $edited = $this->editingAddressId;
+        $this->resetAddressForm();
+
+        if (null !== $edited && $edited === $this->cartFacade->getDeliveryAddressId()) {
+            $this->selectDeliveryAddress($edited);
+        }
     }
 
     #[LiveListener(CheckoutEvents::EDIT_DELIVERY_ADDRESS)]
