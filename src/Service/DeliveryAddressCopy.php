@@ -1,0 +1,62 @@
+<?php
+
+declare(strict_types=1);
+
+/*
+ * This file is part of the Thelia package.
+ * http://www.thelia.net
+ *
+ * (c) OpenStudio <info@thelia.net>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace FlexyBundle\Service;
+
+use Thelia\Domain\Cart\CartFacade;
+use Thelia\Domain\Cart\Service\CartAddressService;
+use Thelia\Model\AddressQuery;
+
+/**
+ * The cart keeps its own copy of the delivery address, taken when the address was chosen,
+ * and the order leaves for that copy: an edit of that very address has to reach it.
+ *
+ * Another street, name or phone is copied over at once, and the carrier stays. Another
+ * country, state or postal code is a new place: its carriers and their postage are asked
+ * again, which only choosing the address again on the delivery step does.
+ */
+readonly class DeliveryAddressCopy
+{
+    public function __construct(
+        private CartFacade $cartFacade,
+        private CartAddressService $cartAddressService,
+    ) {
+    }
+
+    /**
+     * Copies the edited delivery address over the cart's copy, unless it moved.
+     *
+     * @return bool whether the address moved to another place and has to be chosen again
+     */
+    public function followUnlessMoved(int $addressId): bool
+    {
+        $copy = $this->cartFacade->getOrCreateFromSession()->getCartAddressRelatedByAddressDeliveryId();
+        $address = AddressQuery::create()->findPk($addressId);
+
+        if (null === $copy || null === $address) {
+            return false;
+        }
+
+        if ($copy->getCountryId() !== $address->getCountryId()
+            || $copy->getStateId() !== $address->getStateId()
+            || (string) $copy->getZipcode() !== (string) $address->getZipcode()) {
+            return true;
+        }
+
+        // Saved only when a copied column changed: Propel writes nothing otherwise.
+        $this->cartAddressService->getOrCreateCartAddressFromAddress($address, $copy);
+
+        return false;
+    }
+}

@@ -16,7 +16,10 @@ namespace FlexyBundle\Components\Organisms\Invoice;
 
 use FlexyBundle\Event\CheckoutEvents;
 use FlexyBundle\Service\BillingAddressChoice;
+use FlexyBundle\Service\DeliveryAddressCopy;
 use FlexyBundle\Service\GuestCheckoutGate;
+use Symfony\Component\HttpFoundation\RedirectResponse;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\UX\LiveComponent\Attribute\AsLiveComponent;
 use Symfony\UX\LiveComponent\Attribute\LiveAction;
 use Symfony\UX\LiveComponent\Attribute\LiveArg;
@@ -47,6 +50,8 @@ class Base
     public function __construct(
         private readonly CartFacade $cartFacade,
         private readonly GuestCheckoutGate $guestCheckoutGate,
+        private readonly DeliveryAddressCopy $deliveryAddressCopy,
+        private readonly UrlGeneratorInterface $urls,
     ) {
     }
 
@@ -82,7 +87,26 @@ class Base
         }
     }
 
+    /**
+     * The address edited here may also be the one the order is delivered to. Another street,
+     * name or phone reaches the cart at once; another place sends the buyer back to the
+     * delivery step, which chooses the address again and asks its carriers and postage.
+     */
     #[LiveListener(CheckoutEvents::ADD_NEW_DELIVERY_ADDRESS)]
+    public function addressSaved(): ?RedirectResponse
+    {
+        $edited = $this->editingAddressId;
+        $this->resetAddressForm();
+
+        if (null === $edited
+            || $edited !== $this->cartFacade->getDeliveryAddressId()
+            || !$this->deliveryAddressCopy->followUnlessMoved($edited)) {
+            return null;
+        }
+
+        return new RedirectResponse($this->urls->generate('checkout_delivery'));
+    }
+
     #[LiveListener('cancelAddressForm')]
     public function resetAddressForm(): void
     {
