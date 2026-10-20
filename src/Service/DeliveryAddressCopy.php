@@ -26,22 +26,32 @@ use Thelia\Model\AddressQuery;
  * country, state, postal code or city is a new place: a carrier may price by city as well
  * as by postal code (GeolocatedDelivery does), so its carriers and their postage are asked
  * again, which only choosing the address again on the delivery step does.
+ *
+ * Only an address the checkout shows the buyer is followed: the id comes with a request,
+ * and the customer row of a guest carries the addresses of every earlier buyer of that
+ * e-mail address.
  */
-readonly class DeliveryAddressCopy
+final readonly class DeliveryAddressCopy
 {
     public function __construct(
         private CartFacade $cartFacade,
         private CartAddressService $cartAddressService,
+        private GuestCheckoutGate $guestCheckoutGate,
     ) {
     }
 
     /**
      * Copies the edited delivery address over the cart's copy, unless it moved.
      *
-     * @return bool whether the address moved to another place and has to be chosen again
+     * @return bool whether the address moved to another place and has to be chosen again;
+     *              false, with nothing touched, for an address the buyer is not shown
      */
     public function followUnlessMoved(int $addressId): bool
     {
+        if (!$this->guestCheckoutGate->isVisible($addressId)) {
+            return false;
+        }
+
         $copy = $this->cartFacade->getOrCreateFromSession()->getCartAddressRelatedByAddressDeliveryId();
         $address = AddressQuery::create()->findPk($addressId);
 
