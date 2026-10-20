@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace FlexyBundle\Components\Organisms\Delivery;
 
 use FlexyBundle\Event\CheckoutEvents;
+use FlexyBundle\Service\DeliveryAddressCopy;
 use FlexyBundle\Service\DeliveryDateBridge;
 use FlexyBundle\Service\DeliveryOptionChoice;
 use FlexyBundle\Service\GuestCheckoutGate;
@@ -32,12 +33,10 @@ use Thelia\Core\HttpFoundation\Session\Session;
 use Thelia\Domain\Addressing\Exception\AddressNotFoundException;
 use Thelia\Domain\Addressing\Service\AddressService;
 use Thelia\Domain\Cart\CartFacade;
-use Thelia\Domain\Cart\Service\CartAddressService;
 use Thelia\Domain\Checkout\DTO\CheckoutDTO;
 use Thelia\Domain\Customer\Exception\CustomerException;
 use Thelia\Domain\Localization\Service\LangService;
 use Thelia\Domain\Shipping\ShippingFacade;
-use Thelia\Model\AddressQuery;
 
 #[AsLiveComponent]
 class Base
@@ -91,7 +90,7 @@ class Base
         private readonly LoggerInterface $logger,
         private readonly GuestCheckoutGate $guestCheckoutGate,
         private readonly DeliveryDateBridge $deliveryDates,
-        private readonly CartAddressService $cartAddressService,
+        private readonly DeliveryAddressCopy $deliveryAddressCopy,
     ) {
     }
 
@@ -138,31 +137,14 @@ class Base
     }
 
     /**
-     * The cart keeps its own copy of the delivery address, taken when the address was chosen,
-     * and the order leaves for that copy: an edit of that very address reaches it, on this
-     * step or once back on it. A new place, another country, state or postal code, is chosen
-     * again, which asks the carriers and their postage again; anything else is copied over,
-     * and the carrier stays.
+     * An edit of the delivery address reaches the cart, on this step or once back on it: a
+     * new place is chosen again, which asks the carriers and their postage again.
      */
     private function followTheDeliveryAddress(int $addressId): void
     {
-        $copy = $this->cartFacade->getOrCreateFromSession()->getCartAddressRelatedByAddressDeliveryId();
-        $address = AddressQuery::create()->findPk($addressId);
-
-        if (null === $copy || null === $address) {
-            return;
+        if ($this->deliveryAddressCopy->followUnlessMoved($addressId)) {
+            $this->selectDeliveryAddress($addressId);
         }
-
-        if ($copy->getCountryId() === $address->getCountryId()
-            && $copy->getStateId() === $address->getStateId()
-            && (string) $copy->getZipcode() === (string) $address->getZipcode()) {
-            // Saved only when a copied column changed: Propel writes nothing otherwise.
-            $this->cartAddressService->getOrCreateCartAddressFromAddress($address, $copy);
-
-            return;
-        }
-
-        $this->selectDeliveryAddress($addressId);
     }
 
     #[LiveListener(CheckoutEvents::EDIT_DELIVERY_ADDRESS)]
