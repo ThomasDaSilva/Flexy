@@ -23,7 +23,8 @@ use Thelia\Model\AddressQuery;
  * and the order leaves for that copy: an edit of that very address has to reach it.
  *
  * Another street, name or phone is copied over at once, and the carrier stays. Another
- * country, state or postal code is a new place: its carriers and their postage are asked
+ * country, state, postal code or city is a new place: a carrier may price by city as well
+ * as by postal code (GeolocatedDelivery does), so its carriers and their postage are asked
  * again, which only choosing the address again on the delivery step does.
  */
 readonly class DeliveryAddressCopy
@@ -50,7 +51,8 @@ readonly class DeliveryAddressCopy
 
         if ($copy->getCountryId() !== $address->getCountryId()
             || $copy->getStateId() !== $address->getStateId()
-            || (string) $copy->getZipcode() !== (string) $address->getZipcode()) {
+            || (string) $copy->getZipcode() !== (string) $address->getZipcode()
+            || (string) $copy->getCity() !== (string) $address->getCity()) {
             return true;
         }
 
