@@ -54,7 +54,7 @@ final readonly class GuestDeliveryAddress
             return false;
         }
 
-        $addressId = $this->guestCheckoutGate->ownAddressId(null);
+        $addressId = $this->guestCheckoutGate->ownAddressId();
 
         if (null === $addressId) {
             return false;

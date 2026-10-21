@@ -244,8 +244,7 @@ final readonly class GuestCheckoutGate
 
     /**
      * An address of this identification to put on the cart when the guest names none, as a
-     * pickup does: the one asked for when it is theirs, else the default one among theirs,
-     * else the first. Null when they have none.
+     * pickup does: the default one among theirs, else the first. Null when they have none.
      *
      * Never the default address of the customer row: the row is reused by whoever types the
      * same e-mail address, and each identification makes its own address the default one,
@@ -253,27 +252,22 @@ final readonly class GuestCheckoutGate
      *
      * @throws PropelException
      */
-    public function ownAddressId(?int $preferredAddressId): ?int
+    public function ownAddressId(): ?int
     {
-        $defaultId = null;
         $firstId = null;
 
-        // Read once: the preferred address, the default one and the first one alike.
+        // Read once: the default address and the first one alike.
         foreach ($this->visibleAddresses() as $address) {
             $id = (int) $address['id'];
 
-            if ($id === $preferredAddressId) {
+            if ((bool) $address['isDefault']) {
                 return $id;
             }
 
             $firstId ??= $id;
-
-            if ((bool) $address['isDefault']) {
-                $defaultId ??= $id;
-            }
         }
 
-        return $defaultId ?? $firstId;
+        return $firstId;
     }
 
     /**
