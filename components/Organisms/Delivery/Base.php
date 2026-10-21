@@ -330,7 +330,7 @@ class Base
      * their own identification (GuestDeliveryAddress), never the default one of the guest
      * row, which may be another buyer's. The carrier was priced on the address the cart had:
      * once it changed, the carrier is chosen again to price it on the new one, as choosing
-     * an address does.
+     * an address does, and goes when it cannot quote it.
      */
     private function putTheBuyersAddressOnAPickup(int $moduleId): void
     {
@@ -339,9 +339,10 @@ class Base
         if (true === $cart->getCustomer()?->isGuest()) {
             $changed = $this->guestDeliveryAddress->keepAnAddressOfTheGuest($cart);
         } else {
-            $copyBefore = $cart->getAddressDeliveryId();
+            // A core that rewrites the copy the cart has keeps its id: the source tells.
+            $copyBefore = [$cart->getAddressDeliveryId(), $cart->getCartAddressRelatedByAddressDeliveryId()?->getAddressId()];
             $this->shippingFacade->setCustomerDefaultDeliveryAddress($cart);
-            $changed = $copyBefore !== $cart->getAddressDeliveryId();
+            $changed = $copyBefore !== [$cart->getAddressDeliveryId(), $cart->getCartAddressRelatedByAddressDeliveryId()?->getAddressId()];
         }
 
         if (!$changed) {
@@ -350,6 +351,15 @@ class Base
 
         $this->cartFacade->setDeliveryModule(new CheckoutDTO(cart: $cart, deliveryModuleId: $moduleId));
         $this->deliveryAddressId = $this->cartFacade->getDeliveryAddressId();
+        $this->deliveryModuleId = $cart->getDeliveryModuleId();
+
+        if (null === $this->deliveryModuleId) {
+            // The pickup could not quote the address it now carries: it went, as a carrier
+            // goes when the buyer picks an address it does not serve.
+            $this->deliveryModuleOptionCode = null;
+            $this->session->remove('deliveryModuleOption');
+            $this->deliveryDateNotice = 'carrier_gone';
+        }
     }
 
     #[LiveListener(CheckoutEvents::SET_DELIVERY_ORDER_ADDRESS_ID)]
