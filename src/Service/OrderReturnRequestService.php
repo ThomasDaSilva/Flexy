@@ -94,6 +94,7 @@ final readonly class OrderReturnRequestService
         ?int $reasonId,
         string $resolution,
         ?string $comment,
+        ?string $expectedExchange = null,
     ): OrderReturnModel {
         $requestedLines = array_filter($requestedLines, static fn (float $quantity): bool => $quantity > 0);
 
@@ -111,11 +112,20 @@ final readonly class OrderReturnRequestService
             throw new ReturnNotAllowedException('The comment is too long.');
         }
 
+        // Kept on an exchange only, as the core does: a wish left in a form switched to a
+        // refund is not refused for a field the customer no longer sees.
+        $expectedExchange = OrderReturnModel::RESOLUTION_EXCHANGE === $resolution ? trim((string) $expectedExchange) : '';
+        $expectedExchange = '' === $expectedExchange ? null : $expectedExchange;
+
+        if (null !== $expectedExchange && mb_strlen($expectedExchange) > OrderReturnResource::MAX_EXPECTED_EXCHANGE_LENGTH) {
+            throw new ReturnNotAllowedException('The wished exchange is too long.');
+        }
+
         if (!$this->limiter->allows($customer)) {
             throw new TooManyReturnRequestsException('Too many return requests, please try again later.');
         }
 
-        $resource = $this->buildResource($order, $requestedLines, $this->visibleReasonId($reasonId), $resolution, $comment);
+        $resource = $this->buildResource($order, $requestedLines, $this->visibleReasonId($reasonId), $resolution, $comment, $expectedExchange);
 
         // Reading how much of a line is still returnable and writing the return that
         // consumes it are one step, or two requests arriving together are both allowed
@@ -150,6 +160,7 @@ final readonly class OrderReturnRequestService
         ?int $reasonId,
         string $resolution,
         ?string $comment,
+        ?string $expectedExchange,
     ): OrderReturnResource {
         $lines = [];
 
@@ -163,7 +174,8 @@ final readonly class OrderReturnRequestService
             ->setOrder((new OrderResource())->setId((int) $order->getId()))
             ->setOrderReturnLines($lines)
             ->setExpectedResolution($resolution)
-            ->setCustomerComment($comment);
+            ->setCustomerComment($comment)
+            ->setExpectedExchange($expectedExchange);
 
         if (null !== $reasonId) {
             $resource->setOrderReturnReason((new OrderReturnReasonResource())->setId($reasonId));
@@ -213,6 +225,7 @@ final readonly class OrderReturnRequestService
             ->setReasonTitle($resource->getReasonTitle())
             ->setExpectedResolution($resource->getExpectedResolution())
             ->setCustomerComment($resource->getCustomerComment())
+            ->setExpectedExchange($resource->getExpectedExchange())
             // A customer never asks for the postage back through this form: the refund of
             // the shipping costs is a merchant decision, taken in the back office.
             ->setIncludePostage(false)

@@ -449,6 +449,7 @@ Quantity to return (up to %quantity%): Quantity to return (up to %quantity%)
 Reason for the return: Reason for the return
 Select a reason: Select a reason
 What do you expect?: What do you expect?
+What you wish to receive in exchange: What you wish to receive in exchange
 A refund: A refund
 A store credit: A store credit
 An exchange: An exchange
@@ -464,6 +465,7 @@ Download the return document: Download the return document
 Select at least one product to return.: Select at least one product to return.
 The expected resolution is not one the shop offers.: The expected resolution is not one the shop offers.
 The comment is too long.: The comment is too long.
+The wished exchange is too long.: The wished exchange is too long.
 Too many return requests, please try again later.: Too many return requests, please try again later.
 The return could not be opened.: The return could not be opened.
 The product returns feature is disabled.: The product returns feature is disabled.

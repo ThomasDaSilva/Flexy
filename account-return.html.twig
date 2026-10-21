@@ -103,6 +103,14 @@
                     <dd class="m-0 whitespace-pre-line">{{ orderReturn.customerComment }}</dd>
                 </div>
             {% endif %}
+            {# Under an exchange only: a wish kept on a return switched to a refund is not
+               something the shop sends. #}
+            {% if orderReturn.expectedResolution|default('') == 'exchange' and orderReturn.expectedExchange|default('') is not empty %}
+                <div class="sm:col-span-2">
+                    <dt class="paragraph-3">{{ 'What you wish to receive in exchange'|trans }}</dt>
+                    <dd class="m-0 whitespace-pre-line">{{ orderReturn.expectedExchange }}</dd>
+                </div>
+            {% endif %}
         </dl>
 
         <div class="flex flex-wrap gap-4 mt-10">
