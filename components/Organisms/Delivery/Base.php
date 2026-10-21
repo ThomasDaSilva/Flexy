@@ -314,12 +314,39 @@ class Base
         $this->deliveryModuleOptionCode = $optionCode;
 
         if (strtolower($optionCode) === 'localpickup') {
-            $this->shippingFacade->setCustomerDefaultDeliveryAddress($this->cartFacade->getOrCreateFromSession());
+            $this->putTheBuyersAddressOnAPickup();
         }
 
         $this->emit(CheckoutEvents::DELIVERY_MODULE_OPTION_SAVED);
         $this->emit('syncSummary');
         $this->emit('updateNextButton');
+    }
+
+    /**
+     * A pickup still puts an address on the cart, which the order is built from. A customer
+     * with an account gets the default address of the account. A guest gets an address of
+     * this identification only, the one already on the cart when it is theirs: the guest row
+     * is reused by whoever types the same e-mail address, and its default address may be
+     * another buyer's. A guest with no address of their own keeps the cart as it is.
+     */
+    private function putTheBuyersAddressOnAPickup(): void
+    {
+        $cart = $this->cartFacade->getOrCreateFromSession();
+
+        if (!$this->guestCheckoutGate->isCheckingOutAsAGuest()) {
+            $this->shippingFacade->setCustomerDefaultDeliveryAddress($cart);
+
+            return;
+        }
+
+        $currentSourceId = $cart->getCartAddressRelatedByAddressDeliveryId()?->getAddressId();
+        $addressId = $this->guestCheckoutGate->ownAddressId($currentSourceId);
+
+        if (null === $addressId || $addressId === $currentSourceId) {
+            return;
+        }
+
+        $this->shippingFacade->chooseDeliveryAddress($cart, $addressId);
     }
 
     #[LiveListener(CheckoutEvents::SET_DELIVERY_ORDER_ADDRESS_ID)]
