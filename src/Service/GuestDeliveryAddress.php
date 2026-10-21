@@ -37,6 +37,10 @@ final readonly class GuestDeliveryAddress
     }
 
     /**
+     * A copy the cart has is kept when its source is an address of this identification, and
+     * when it has no source: such a copy was written for this cart alone, by this buyer, and
+     * nothing of the guest row is in it.
+     *
      * @return bool whether the cart's copy of its delivery address changed; false for a cart
      *              that is not a guest's
      *
@@ -48,10 +52,14 @@ final readonly class GuestDeliveryAddress
             return false;
         }
 
-        $sourceId = $cart->getCartAddressRelatedByAddressDeliveryId()?->getAddressId();
+        $copy = $cart->getCartAddressRelatedByAddressDeliveryId();
 
-        if (null !== $sourceId && $this->guestCheckoutGate->isVisible($sourceId)) {
-            return false;
+        if (null !== $copy) {
+            $sourceId = $copy->getAddressId();
+
+            if (null === $sourceId || $this->guestCheckoutGate->isVisible($sourceId)) {
+                return false;
+            }
         }
 
         $addressId = $this->guestCheckoutGate->ownAddressId();
