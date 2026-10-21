@@ -255,19 +255,25 @@ final readonly class GuestCheckoutGate
      */
     public function ownAddressId(?int $preferredAddressId): ?int
     {
-        $addresses = $this->visibleAddresses();
+        $defaultId = null;
+        $firstId = null;
 
-        if (null !== $preferredAddressId && $this->isVisible($preferredAddressId)) {
-            return $preferredAddressId;
-        }
+        // Read once: the preferred address, the default one and the first one alike.
+        foreach ($this->visibleAddresses() as $address) {
+            $id = (int) $address['id'];
 
-        foreach ($addresses as $address) {
+            if ($id === $preferredAddressId) {
+                return $id;
+            }
+
+            $firstId ??= $id;
+
             if ((bool) $address['isDefault']) {
-                return (int) $address['id'];
+                $defaultId ??= $id;
             }
         }
 
-        return [] === $addresses ? null : (int) $addresses[array_key_first($addresses)]['id'];
+        return $defaultId ?? $firstId;
     }
 
     /**
