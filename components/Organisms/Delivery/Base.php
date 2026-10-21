@@ -19,6 +19,7 @@ use FlexyBundle\Service\DeliveryAddressCopy;
 use FlexyBundle\Service\DeliveryDateBridge;
 use FlexyBundle\Service\DeliveryOptionChoice;
 use FlexyBundle\Service\GuestCheckoutGate;
+use FlexyBundle\Service\GuestDeliveryAddress;
 use Propel\Runtime\Exception\PropelException;
 use Psr\Log\LoggerInterface;
 use Symfony\UX\LiveComponent\Attribute\AsLiveComponent;
@@ -91,6 +92,7 @@ class Base
         private readonly GuestCheckoutGate $guestCheckoutGate,
         private readonly DeliveryDateBridge $deliveryDates,
         private readonly DeliveryAddressCopy $deliveryAddressCopy,
+        private readonly GuestDeliveryAddress $guestDeliveryAddress,
     ) {
     }
 
@@ -314,7 +316,7 @@ class Base
         $this->deliveryModuleOptionCode = $optionCode;
 
         if (strtolower($optionCode) === 'localpickup') {
-            $this->putTheBuyersAddressOnAPickup();
+            $this->putTheBuyersAddressOnAPickup($moduleId);
         }
 
         $this->emit(CheckoutEvents::DELIVERY_MODULE_OPTION_SAVED);
@@ -325,28 +327,29 @@ class Base
     /**
      * A pickup still puts an address on the cart, which the order is built from. A customer
      * with an account gets the default address of the account. A guest gets an address of
-     * this identification only, the one already on the cart when it is theirs: the guest row
-     * is reused by whoever types the same e-mail address, and its default address may be
-     * another buyer's. A guest with no address of their own keeps the cart as it is.
+     * their own identification (GuestDeliveryAddress), never the default one of the guest
+     * row, which may be another buyer's. The carrier was priced on the address the cart had:
+     * once it changed, the carrier is chosen again to price it on the new one, as choosing
+     * an address does.
      */
-    private function putTheBuyersAddressOnAPickup(): void
+    private function putTheBuyersAddressOnAPickup(int $moduleId): void
     {
         $cart = $this->cartFacade->getOrCreateFromSession();
 
-        if (!$this->guestCheckoutGate->isCheckingOutAsAGuest()) {
+        if (true === $cart->getCustomer()?->isGuest()) {
+            $changed = $this->guestDeliveryAddress->keepAnAddressOfTheGuest($cart);
+        } else {
+            $copyBefore = $cart->getAddressDeliveryId();
             $this->shippingFacade->setCustomerDefaultDeliveryAddress($cart);
+            $changed = $copyBefore !== $cart->getAddressDeliveryId();
+        }
 
+        if (!$changed) {
             return;
         }
 
-        $currentSourceId = $cart->getCartAddressRelatedByAddressDeliveryId()?->getAddressId();
-        $addressId = $this->guestCheckoutGate->ownAddressId($currentSourceId);
-
-        if (null === $addressId || $addressId === $currentSourceId) {
-            return;
-        }
-
-        $this->shippingFacade->chooseDeliveryAddress($cart, $addressId);
+        $this->cartFacade->setDeliveryModule(new CheckoutDTO(cart: $cart, deliveryModuleId: $moduleId));
+        $this->deliveryAddressId = $this->cartFacade->getDeliveryAddressId();
     }
 
     #[LiveListener(CheckoutEvents::SET_DELIVERY_ORDER_ADDRESS_ID)]
