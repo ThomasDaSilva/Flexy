@@ -117,7 +117,7 @@ final readonly class OrderReturnRequestService
         $expectedExchange = OrderReturnModel::RESOLUTION_EXCHANGE === $resolution ? trim((string) $expectedExchange) : '';
         $expectedExchange = '' === $expectedExchange ? null : $expectedExchange;
 
-        if (null !== $expectedExchange && mb_strlen($expectedExchange) > OrderReturnResource::MAX_EXPECTED_EXCHANGE_LENGTH) {
+        if (null !== $expectedExchange && mb_strlen($expectedExchange) > self::MAX_COMMENT_LENGTH) {
             throw new ReturnNotAllowedException('The wished exchange is too long.');
         }
 
@@ -174,8 +174,11 @@ final readonly class OrderReturnRequestService
             ->setOrder((new OrderResource())->setId((int) $order->getId()))
             ->setOrderReturnLines($lines)
             ->setExpectedResolution($resolution)
-            ->setCustomerComment($comment)
-            ->setExpectedExchange($expectedExchange);
+            ->setCustomerComment($comment);
+
+        if (null !== $expectedExchange && self::coreKeepsTheWish()) {
+            $resource->setExpectedExchange($expectedExchange);
+        }
 
         if (null !== $reasonId) {
             $resource->setOrderReturnReason((new OrderReturnReasonResource())->setId($reasonId));
@@ -225,11 +228,14 @@ final readonly class OrderReturnRequestService
             ->setReasonTitle($resource->getReasonTitle())
             ->setExpectedResolution($resource->getExpectedResolution())
             ->setCustomerComment($resource->getCustomerComment())
-            ->setExpectedExchange($resource->getExpectedExchange())
             // A customer never asks for the postage back through this form: the refund of
             // the shipping costs is a merchant decision, taken in the back office.
             ->setIncludePostage(false)
             ->setCreatedByAdmin(false);
+
+        if (self::coreKeepsTheWish()) {
+            $model->setExpectedExchange($resource->getExpectedExchange());
+        }
 
         // DECIMAL columns take a string in the native Propel models: handing them a float
         // is how a rounded amount gets written.
@@ -253,5 +259,14 @@ final readonly class OrderReturnRequestService
     private function decimal(?float $amount): string
     {
         return number_format($amount ?? 0.0, 6, '.', '');
+    }
+
+    /**
+     * The wished exchange has its own field from thelia/thelia#4218 on: a core without it
+     * still opens the return, the wish is left out.
+     */
+    private static function coreKeepsTheWish(): bool
+    {
+        return method_exists(OrderReturnModel::class, 'setExpectedExchange');
     }
 }
