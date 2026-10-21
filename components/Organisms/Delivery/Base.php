@@ -342,10 +342,15 @@ class Base
         if (true === $cart->getCustomer()?->isGuest()) {
             $changed = $this->guestDeliveryAddress->keepAnAddressOfTheGuest($cart);
         } else {
-            // A core that rewrites the copy the cart has keeps its id: the source tells.
             $copyBefore = [$cart->getAddressDeliveryId(), $cart->getCartAddressRelatedByAddressDeliveryId()?->getAddressId()];
-            $this->shippingFacade->setCustomerDefaultDeliveryAddress($cart);
-            $changed = $copyBefore !== [$cart->getAddressDeliveryId(), $cart->getCartAddressRelatedByAddressDeliveryId()?->getAddressId()];
+            // A core that tells whether the place of the copy changed answers a boolean. An
+            // older one answers nothing, and the copy is compared: one rewritten in place keeps
+            // its id, its source tells. Called by name: the static analysis of either core
+            // would otherwise rule one branch out.
+            $moved = \call_user_func([$this->shippingFacade, 'setCustomerDefaultDeliveryAddress'], $cart);
+            $changed = \is_bool($moved)
+                ? $moved
+                : $copyBefore !== [$cart->getAddressDeliveryId(), $cart->getCartAddressRelatedByAddressDeliveryId()?->getAddressId()];
         }
 
         if (!$changed) {
