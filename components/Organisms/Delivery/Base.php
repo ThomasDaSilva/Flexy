@@ -335,6 +335,9 @@ class Base
     private function putTheBuyersAddressOnAPickup(int $moduleId): void
     {
         $cart = $this->cartFacade->getOrCreateFromSession();
+        // Read before the address changes, as selectDeliveryAddress() does: the notice of a
+        // carrier gone speaks of the delivery day it took away.
+        $hadADeliveryDay = null !== $this->deliveryDates->chosenOn($cart, null);
 
         if (true === $cart->getCustomer()?->isGuest()) {
             $changed = $this->guestDeliveryAddress->keepAnAddressOfTheGuest($cart);
@@ -355,10 +358,14 @@ class Base
 
         if (null === $this->deliveryModuleId) {
             // The pickup could not quote the address it now carries: it went, as a carrier
-            // goes when the buyer picks an address it does not serve.
+            // goes when the buyer picks an address it does not serve. The notice speaks of the
+            // delivery day cleared with it: said only when there was one.
             $this->deliveryModuleOptionCode = null;
             $this->session->remove('deliveryModuleOption');
-            $this->deliveryDateNotice = 'carrier_gone';
+
+            if ($hadADeliveryDay) {
+                $this->deliveryDateNotice = 'carrier_gone';
+            }
         }
     }
 
