@@ -446,6 +446,7 @@ Quantity to return (up to %quantity%): Rücksendemenge (bis zu %quantity%)
 Reason for the return: Grund der Rücksendung
 Select a reason: Grund auswählen
 What do you expect?: Was möchten Sie?
+What you wish to receive in exchange: Was Sie im Umtausch erhalten möchten
 A refund: Eine Rückerstattung
 A store credit: Eine Gutschrift
 An exchange: Einen Umtausch
@@ -461,6 +462,7 @@ Download the return document: Rücksendeschein herunterladen
 Select at least one product to return.: Wählen Sie mindestens ein Produkt für die Rücksendung aus.
 The expected resolution is not one the shop offers.: Die gewünschte Lösung wird vom Shop nicht angeboten.
 The comment is too long.: Der Kommentar ist zu lang.
+The wished exchange is too long.: Der gewünschte Umtausch ist zu lang.
 Too many return requests, please try again later.: Zu viele Rücksendeanträge, bitte versuchen Sie es später erneut.
 The return could not be opened.: Der Rücksendeantrag konnte nicht angelegt werden.
 The product returns feature is disabled.: Rücksendungen werden von diesem Shop nicht angeboten.

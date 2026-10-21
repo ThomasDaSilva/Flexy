@@ -449,6 +449,7 @@ Quantity to return (up to %quantity%): Quantité à retourner (jusqu'à %quantit
 Reason for the return: Motif du retour
 Select a reason: Choisissez un motif
 What do you expect?: Que souhaitez-vous ?
+What you wish to receive in exchange: Ce que vous souhaitez recevoir en échange
 A refund: Un remboursement
 A store credit: Un avoir
 An exchange: Un échange
@@ -464,6 +465,7 @@ Download the return document: Télécharger le document de retour
 Select at least one product to return.: Sélectionnez au moins un produit à retourner.
 The expected resolution is not one the shop offers.: La résolution demandée n'est pas proposée par la boutique.
 The comment is too long.: Le commentaire est trop long.
+The wished exchange is too long.: L'échange souhaité est trop long.
 Too many return requests, please try again later.: Trop de demandes de retour, merci de réessayer plus tard.
 The return could not be opened.: La demande de retour n'a pas pu être ouverte.
 The product returns feature is disabled.: Les retours produits ne sont pas proposés par cette boutique.
