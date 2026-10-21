@@ -15,7 +15,6 @@ declare(strict_types=1);
 namespace FlexyBundle\Tests\Integration;
 
 use FlexyBundle\Service\OrderReturnRequestService;
-use Thelia\Api\Resource\OrderReturn as OrderReturnResource;
 use Thelia\Domain\OrderReturn\Exception\ReturnNotAllowedException;
 use Thelia\Domain\OrderReturn\Service\ReturnEligibilityChecker;
 use Thelia\Model\ConfigQuery;
@@ -39,6 +38,10 @@ final class OrderReturnExpectedExchangeTest extends IntegrationTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        if (!method_exists(OrderReturn::class, 'getExpectedExchange')) {
+            self::markTestSkipped('The core has no field for the wished exchange yet (thelia/thelia#4218).');
+        }
 
         $this->factory = $this->createFixtureFactory();
         ConfigQuery::write(ReturnEligibilityChecker::ENABLED_CONFIG_KEY, '1');
@@ -77,14 +80,14 @@ final class OrderReturnExpectedExchangeTest extends IntegrationTestCase
         $this->expectException(ReturnNotAllowedException::class);
         $this->expectExceptionMessage('The wished exchange is too long.');
 
-        $this->service()->open($order, $customer, [(int) $orderProduct->getId() => 1.0], null, OrderReturn::RESOLUTION_EXCHANGE, null, str_repeat('L', OrderReturnResource::MAX_EXPECTED_EXCHANGE_LENGTH + 1));
+        $this->service()->open($order, $customer, [(int) $orderProduct->getId() => 1.0], null, OrderReturn::RESOLUTION_EXCHANGE, null, str_repeat('L', OrderReturnRequestService::MAX_COMMENT_LENGTH + 1));
     }
 
     public function testAWishIsKeptOnAnExchangeOnly(): void
     {
         [$customer, $order, $orderProduct] = $this->paidOrder();
 
-        $return = $this->service()->open($order, $customer, [(int) $orderProduct->getId() => 1.0], null, OrderReturn::RESOLUTION_REFUND, 'Too small.', str_repeat('L', OrderReturnResource::MAX_EXPECTED_EXCHANGE_LENGTH + 1));
+        $return = $this->service()->open($order, $customer, [(int) $orderProduct->getId() => 1.0], null, OrderReturn::RESOLUTION_REFUND, 'Too small.', str_repeat('L', OrderReturnRequestService::MAX_COMMENT_LENGTH + 1));
 
         self::assertNull($return->getExpectedExchange(), 'A refund is not something sent back in exchange, however long the wish left in the form.');
     }
