@@ -117,7 +117,7 @@ final readonly class OrderReturnRequestService
         $expectedExchange = OrderReturnModel::RESOLUTION_EXCHANGE === $resolution ? trim((string) $expectedExchange) : '';
         $expectedExchange = '' === $expectedExchange ? null : $expectedExchange;
 
-        if (null !== $expectedExchange && mb_strlen($expectedExchange) > self::MAX_COMMENT_LENGTH) {
+        if (null !== $expectedExchange && mb_strlen($expectedExchange) > self::maxWishLength()) {
             throw new ReturnNotAllowedException('The wished exchange is too long.');
         }
 
@@ -268,5 +268,17 @@ final readonly class OrderReturnRequestService
     private static function coreKeepsTheWish(): bool
     {
         return method_exists(OrderReturnModel::class, 'setExpectedExchange');
+    }
+
+    /**
+     * The core bounds the wish and checks it again in the hydrator: reading its bound
+     * keeps a wish it would refuse from being refused only after the request quota is
+     * used. A core without the field has no bound of its own.
+     */
+    private static function maxWishLength(): int
+    {
+        return \defined(OrderReturnResource::class.'::MAX_EXPECTED_EXCHANGE_LENGTH')
+            ? OrderReturnResource::MAX_EXPECTED_EXCHANGE_LENGTH
+            : self::MAX_COMMENT_LENGTH;
     }
 }
