@@ -18,6 +18,7 @@ use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
+use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 use FlexyBundle\Service\PaymentOptionChoiceStore;
 use Thelia\Core\Event\Order\OrderPaymentEvent;
@@ -74,6 +75,9 @@ final class PaymentPartsAndStoredMethodsTest extends WebIntegrationTestCase
 
     /** @var list<int> */
     private array $exhaustedCustomerIds = [];
+
+    /** @var list<array{group: string, values: list<string>}>|null */
+    private ?array $paymentOptionChoicesLeftByTheRequest = null;
 
     protected function setUp(): void
     {
@@ -235,14 +239,14 @@ final class PaymentPartsAndStoredMethodsTest extends WebIntegrationTestCase
         $this->installPaymentModule(InstantTestPaymentModule::class, static::getContainer(), $this->getPropelConnection());
 
         $this->chooseTheModule($storedModule);
-        $this->seedThePaymentOptionChoices();
+        $this->keepThePaymentOptionChoicesInTheSession();
         $this->requestThePaymentStep();
-        self::assertSame(self::PICKED, $this->paymentOptionChoicesOfTheSession(), 'The scenario needs the options in the session.');
+        self::assertSame(self::PICKED, $this->paymentOptionChoicesAfterTheRequest(), 'The scenario needs the options in the session.');
 
         InstantTestPaymentModule::$appliedAmount = '99999';
         $this->requestThePaymentStep();
 
-        self::assertSame([], $this->paymentOptionChoicesOfTheSession(), 'The instant means took the place of the provider the options were picked for.');
+        self::assertSame([], $this->paymentOptionChoicesAfterTheRequest(), 'The instant means took the place of the provider the options were picked for.');
     }
 
     public function testTheOptionsPickedForAProviderAreLetGoWhenThePartsChangeTheModule(): void
@@ -251,15 +255,14 @@ final class PaymentPartsAndStoredMethodsTest extends WebIntegrationTestCase
         $this->installPaymentModule(InstantTestPaymentModule::class, static::getContainer(), $this->getPropelConnection());
 
         $this->chooseTheModule($storedModule);
-        $this->seedThePaymentOptionChoices();
-        $before = $this->requestThePaymentStep();
-        self::assertSame(self::PICKED, $this->paymentOptionChoicesOfTheSession(), 'The scenario needs the options in the session.');
+        $this->keepThePaymentOptionChoicesInTheSession();
+        $step = $this->requestThePaymentStep();
+        self::assertSame(self::PICKED, $this->paymentOptionChoicesAfterTheRequest(), 'The scenario needs the options in the session.');
 
         InstantTestPaymentModule::$appliedAmount = '99999';
-        $component = $before->filter(\sprintf('[data-live-url-value][data-live-name-value="%s"]', self::COMPONENT))->first();
-        $this->liveStepOf($component, 'readThePartsAgain', []);
+        $this->liveStepOf($this->liveComponentOf($step), 'readThePartsAgain', []);
 
-        self::assertSame([], $this->paymentOptionChoicesOfTheSession());
+        self::assertSame([], $this->paymentOptionChoicesAfterTheRequest());
     }
 
     public function testTheOptionsPickedAreKeptWhenThePartsLeaveTheModuleAlone(): void
@@ -268,13 +271,13 @@ final class PaymentPartsAndStoredMethodsTest extends WebIntegrationTestCase
         $this->installPaymentModule(InstantTestPaymentModule::class, static::getContainer(), $this->getPropelConnection());
 
         $this->chooseTheModule($storedModule);
-        $this->seedThePaymentOptionChoices();
-        $before = $this->requestThePaymentStep();
+        $this->keepThePaymentOptionChoicesInTheSession();
+        $step = $this->requestThePaymentStep();
+        self::assertSame(self::PICKED, $this->paymentOptionChoicesAfterTheRequest(), 'The scenario needs the options in the session.');
 
-        $component = $before->filter(\sprintf('[data-live-url-value][data-live-name-value="%s"]', self::COMPONENT))->first();
-        $this->liveStepOf($component, 'readThePartsAgain', []);
+        $this->liveStepOf($this->liveComponentOf($step), 'readThePartsAgain', []);
 
-        self::assertSame(self::PICKED, $this->paymentOptionChoicesOfTheSession());
+        self::assertSame(self::PICKED, $this->paymentOptionChoicesAfterTheRequest());
     }
 
     public function testAPartThatNoProviderCanChargeTheBalanceOfIsToldToTheBuyer(): void
@@ -595,31 +598,39 @@ final class PaymentPartsAndStoredMethodsTest extends WebIntegrationTestCase
         ));
     }
 
-    /**
-     * Puts options in the session of the buyer on the next request, as the options of the provider
-     * would be after a click: the options are written by a live action that needs a provider offering
-     * option groups, which the test modules do not.
-     */
-    private function seedThePaymentOptionChoices(): void
+    private function liveComponentOf(Crawler $step): Crawler
     {
-        $seeded = false;
+        return $step->filter(\sprintf('[data-live-url-value][data-live-name-value="%s"]', self::COMPONENT))->first();
+    }
 
-        $this->listen(KernelEvents::REQUEST, static function (RequestEvent $event) use (&$seeded): void {
-            if ($seeded || !$event->isMainRequest() || !$event->getRequest()->hasSession()) {
-                return;
+    /**
+     * Puts options in the session at the start of every request the client sends from now on, as the
+     * options of the provider would be after a click (the options are written by a live action that
+     * needs a provider offering option groups, which the test modules do not), and notes what the
+     * session holds when the response leaves. The test client does not hand its session back, so the
+     * session is read from inside the request.
+     */
+    private function keepThePaymentOptionChoicesInTheSession(): void
+    {
+        $this->listen(KernelEvents::REQUEST, static function (RequestEvent $event): void {
+            if ($event->isMainRequest() && $event->getRequest()->hasSession()) {
+                $event->getRequest()->getSession()->set(PaymentOptionChoiceStore::SESSION_KEY, self::PICKED);
             }
+        }, -10);
 
-            $seeded = true;
-            $event->getRequest()->getSession()->set(PaymentOptionChoiceStore::SESSION_KEY, self::PICKED);
+        $this->listen(KernelEvents::RESPONSE, function (ResponseEvent $event): void {
+            if ($event->isMainRequest() && $event->getRequest()->hasSession()) {
+                $this->paymentOptionChoicesLeftByTheRequest = $event->getRequest()->getSession()->get(PaymentOptionChoiceStore::SESSION_KEY, []);
+            }
         }, -10);
     }
 
     /**
      * @return list<array{group: string, values: list<string>}>
      */
-    private function paymentOptionChoicesOfTheSession(): array
+    private function paymentOptionChoicesAfterTheRequest(): array
     {
-        return $this->client->getRequest()->getSession()->get(PaymentOptionChoiceStore::SESSION_KEY, []);
+        return $this->paymentOptionChoicesLeftByTheRequest ?? self::fail('No request went through the listener that notes the options of the session.');
     }
 
     private function requestThePaymentStep(): Crawler
